@@ -1,10 +1,23 @@
 import streamlit as st
 import random
-# 👇 ブラウザ内蔵の背面カメラ機能を読み込む
 from streamlit_back_camera_input import back_camera_input
 
-# 『あ』〜『ん』の一般的なひらがな（清音）リストを用意
-HIRAGANA_LIST = list("あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをん")
+# ========================================
+# ひらがなリストの設定
+# ========================================
+# 清音
+SEION = list("あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをん")
+# 濁音・半濁音
+DAKUON = list("がぎぐげござじずぜぞだぢづでどばびぶべぼぱぴぷぺぽ")
+# 拗音（2文字で1つの音として扱う）
+YOUON =["きゃ", "きゅ", "きょ", "しゃ", "しゅ", "しょ", "ちゃ", "ちゅ", "ちょ", 
+         "にゃ", "にゅ", "にょ", "ひゃ", "ひゅ", "ひょ", "みゃ", "みゅ", "みょ", "りゃ", "りゅ", "りょ",
+         "ぎゃ", "ぎゅ", "ぎょ", "じゃ", "じゅ", "じょ", "びゃ", "びゅ", "びょ", "ぴゃ", "ぴゅ", "ぴょ"]
+# 促音
+SOKUON = ["っ"]
+
+# すべて結合して1つのリストにする
+HIRAGANA_LIST = SEION + DAKUON + YOUON + SOKUON
 
 def init_state():
     """セッションステートの初期化"""
@@ -30,9 +43,10 @@ def main():
         st.header("1. 書き取りフェーズ")
         
         if not st.session_state.target_chars:
+            # ランダムに5つの「音」を抽出して文字列にする
             st.session_state.target_chars = "".join(random.sample(HIRAGANA_LIST, 5))
             
-        st.write("以下のひらがな5文字を手元の紙に速記してください。")
+        st.write("以下の文字を手元の紙に速記してください。")
         
         st.markdown(
             f"<div style='text-align: center; font-size: 80px; font-weight: bold; letter-spacing: 10px; margin: 30px 0;'>"
@@ -52,7 +66,7 @@ def main():
         st.write("速記した手元の紙をカメラで撮影してください。")
         st.info("💡 画面に映っているカメラ映像を直接タップすると無音で撮影できます。")
         
-        # 👇 ここが「ブラウザ内蔵カメラ」になり、無音・写真保存なしになります
+        # 無音・写真保存なしのブラウザ内蔵カメラ
         img = back_camera_input()
         
         if img is not None:
@@ -73,7 +87,8 @@ def main():
         if st.session_state.captured_image is not None:
             st.image(st.session_state.captured_image, caption="あなたの速記メモ", use_container_width=True)
             
-        user_input = st.text_input("読み取った5文字を入力してください:", max_chars=5)
+        # 拗音が入ると5文字を超えるため max_chars は設定しない
+        user_input = st.text_input("読み取った文字を入力してください:")
         
         if st.button("判定", type="primary"):
             st.session_state.judged = True
