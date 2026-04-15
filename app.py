@@ -52,8 +52,8 @@ def main():
         st.header("2. 撮影フェーズ")
         st.write("速記した手元の紙をカメラで撮影してください。")
         
-        # カメラ入力を配置
-        img = st.camera_input("カメラで撮影")
+        # スマホからタップすると「写真を撮る」が選べます
+        img = st.file_uploader("カメラで撮影（または画像を選択）", type=["png", "jpg", "jpeg"])
         
         # 撮影完了後の処理
         if img is not None:
