@@ -5,19 +5,56 @@ from streamlit_back_camera_input import back_camera_input
 # ========================================
 # ひらがなリストの設定
 # ========================================
-# 清音
 SEION = list("あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをん")
-# 濁音・半濁音
 DAKUON = list("がぎぐげござじずぜぞだぢづでどばびぶべぼぱぴぷぺぽ")
-# 拗音（2文字で1つの音として扱う）
 YOUON =["きゃ", "きゅ", "きょ", "しゃ", "しゅ", "しょ", "ちゃ", "ちゅ", "ちょ", 
          "にゃ", "にゅ", "にょ", "ひゃ", "ひゅ", "ひょ", "みゃ", "みゅ", "みょ", "りゃ", "りゅ", "りょ",
          "ぎゃ", "ぎゅ", "ぎょ", "じゃ", "じゅ", "じょ", "びゃ", "びゅ", "びょ", "ぴゃ", "ぴゅ", "ぴょ"]
-# 促音
 SOKUON = ["っ"]
 
 # すべて結合して1つのリストにする
 HIRAGANA_LIST = SEION + DAKUON + YOUON + SOKUON
+
+def generate_question():
+    """速記の反復記号練習用に、様々なパターンの問題をランダム生成する"""
+    # 1: 通常（ランダム5ブロック）
+    # 2: 1音の繰り返し（例：あかかいう）
+    # 3: 2音の繰り返し（例：あかいかき）
+    # 4: 3音の繰り返し（例：あいうあいう）
+    # 5: 4音の繰り返し（例：あいうえあいうえ）
+    
+    # どのパターンを出すかランダムに決定
+    pattern = random.choice([1, 2, 3, 4, 5])
+    
+    if pattern == 1:
+        return "".join(random.sample(HIRAGANA_LIST, 5))
+        
+    elif pattern == 2:
+        # 1音の繰り返し(AA) ＋ 他3音
+        chars = random.sample(HIRAGANA_LIST, 4)
+        repeat_part = [chars[0], chars[0]] # AAを作る
+        others = chars[1:]
+        # ランダムな位置に挿入
+        pos = random.randint(0, len(others))
+        return "".join(others[:pos] + repeat_part + others[pos:])
+        
+    elif pattern == 3:
+        # 2音の繰り返し(ABAB) ＋ 他1音
+        chars = random.sample(HIRAGANA_LIST, 3)
+        repeat_part =[chars[0], chars[1], chars[0], chars[1]] # ABABを作る
+        others =[chars[2]]
+        pos = random.randint(0, len(others))
+        return "".join(others[:pos] + repeat_part + others[pos:])
+        
+    elif pattern == 4:
+        # 3音の繰り返し (ABCABC)
+        chars = random.sample(HIRAGANA_LIST, 3)
+        return "".join(chars + chars)
+        
+    elif pattern == 5:
+        # 4音の繰り返し (ABCDABCD)
+        chars = random.sample(HIRAGANA_LIST, 4)
+        return "".join(chars + chars)
 
 def init_state():
     """セッションステートの初期化"""
@@ -43,8 +80,8 @@ def main():
         st.header("1. 書き取りフェーズ")
         
         if not st.session_state.target_chars:
-            # ランダムに5つの「音」を抽出して文字列にする
-            st.session_state.target_chars = "".join(random.sample(HIRAGANA_LIST, 5))
+            # 専用関数を使ってお題を生成
+            st.session_state.target_chars = generate_question()
             
         st.write("以下の文字を手元の紙に速記してください。")
         
@@ -87,7 +124,6 @@ def main():
         if st.session_state.captured_image is not None:
             st.image(st.session_state.captured_image, caption="あなたの速記メモ", use_container_width=True)
             
-        # 拗音が入ると5文字を超えるため max_chars は設定しない
         user_input = st.text_input("読み取った文字を入力してください:")
         
         if st.button("判定", type="primary"):
