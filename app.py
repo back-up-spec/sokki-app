@@ -2,11 +2,10 @@ import streamlit as st
 import random
 import time
 from streamlit_drawable_canvas import st_canvas
-# 👇 ローカルストレージ（ブラウザへの保存）用の拡張機能を読み込む
 from streamlit_local_storage import LocalStorage
 
 # ========================================
-# ひらがなリストの設定
+# ひらがな・単語リスト（データベース）の設定
 # ========================================
 SEION = list("あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをん")
 DAKUON = list("がぎぐげござじずぜぞだぢづでどばびぶべぼぱぴぷぺぽ")
@@ -17,10 +16,38 @@ SOKUON = ["っ"]
 
 HIRAGANA_LIST = SEION + DAKUON + YOUON + SOKUON
 
-# ローカルストレージ機能の初期化
+# 👇【パターンB】巨大辞書データ（実用的な日常単語 約300語）
+WORDS_DB_STRING = (
+    "ありがとう こんにちは さようなら おはよう おやすみ よろしく いただきます ごちそうさま おねがい すみません "
+    "ごめんなさい おつかれさま たいへん がんばって だいじょうぶ ほんとうに すばらしい かわいい かっこいい たのしい "
+    "うれしい かなしい さびしい おかしい あやしい せんせい がくせい がっこう かいしゃ しごと りょこう さんぽ "
+    "かいもの でんわ てがみ としょかん びょういん けいさつ ゆうびんきょく ぎんこう かぞく りょうしん きょうだい "
+    "ともだち こども おとな おとこ おんな いぬ ねこ くるま でんしゃ ひこうき ふね じてんしゃ しんごう みち はし "
+    "こうえん まち むら くに せかい そら うみ やま かわ はな き くさ てんき あめ ゆき かぜ くも はれ あさ ひる "
+    "ゆうがた よる きょう あした きのう あさって おととい こんしゅう らいしゅう せんしゅう ことし らいねん きょねん "
+    "まいにち まいしゅう まいとし じかん とけい ごはん あさごはん ひるごはん ばんごはん みず おちゃ ぎゅうにゅう "
+    "おさけ にく さかな たまご やさい くだもの おかし りょうり さくら まつり おしょうがつ なつやすみ ふゆやすみ "
+    "はる なつ あき ふゆ みぎ ひだり まえ うしろ うえ した なか そと となり ちかく とおく あかい あおい しろい "
+    "くろい きいろい おおきい ちいさい たかい ひくい あたらしい ふるい いい わるい あつい さむい つめたい むずかしい "
+    "やさしい やすい おいしい まずい いそがしい ひまな おもしろい つまらない ちかい とおい はやい おそい おおい "
+    "すくない あたたかい すずしい あまい からい にがい すっぱい おもい かるい ひろい せまい わかい ながい みじかい "
+    "あかるい くらい いたい じょうぶな げんきな しずかな にぎやかな ゆうめいな しんせつな べんりな ふべんな すきな "
+    "きらいな じょうずな へたな いろいろな きれいな きたない あぶない あんぜんな たいせつな かんたんな ふくざつな "
+    "とくべつな ふつうの おなじ ちがう わかる できる ある いる いく くる かえる たべる のむ みる きく はなす よむ "
+    "かく かう あう たつ すわる おきる ねる あそぶ やすむ はたらく およぐ つくる つかう おしえる ならう のる おりる "
+    "はいる でる あける しめる つける けす まつ もつ とる よぶ おぼえる わすれる なくす さがす みつける しらべる "
+    "かんがえる おもう いう こたえる わらう なく おこる よろこぶ おどろく あせる ほめる しかる あやまる いのる "
+    "たすける てつだう がんばる あきらめる はじめる おわる つづける やめる かわる かえる ふえる へる あがる さがる "
+    "すすむ もどる はしる あるく とぶ まわる すべる ころぶ おちる なげる ける たたく おす ひく あらう みがく きる "
+    "ぬぐ はく かぶる かける する なる"
+)
+# スペースで区切って、約300語のリスト（配列）に自動変換する
+WORD_LIST = WORDS_DB_STRING.split()
+
 localS = LocalStorage()
 
-def generate_question():
+def generate_random_question():
+    """ランダム練習モード用のお題生成"""
     patterns =[1, 2, 3, 4, 5]
     weights =[60, 10, 10, 10, 10]
     pattern = random.choices(patterns, weights=weights, k=1)[0]
@@ -46,11 +73,17 @@ def generate_question():
         chars = random.sample(HIRAGANA_LIST, 4)
         return "".join(chars + chars)
 
+def generate_word_question():
+    """単語練習モード用のお題生成（巨大辞書からランダムに1語抽出）"""
+    return random.choice(WORD_LIST)
+
 def init_state():
     if "phase" not in st.session_state:
         st.session_state.phase = 0
+    if "practice_mode" not in st.session_state:
+        st.session_state.practice_mode = "ランダム練習モード"
     if "total_questions" not in st.session_state:
-        st.session_state.total_questions = 3
+        st.session_state.total_questions = 5
     if "questions_list" not in st.session_state:
         st.session_state.questions_list =[]
     if "current_q_index" not in st.session_state:
@@ -70,11 +103,12 @@ def init_state():
     if "judged" not in st.session_state:
         st.session_state.judged = False
         
-    # 👇 ブラウザの保存領域から「sokki_scores」という名前で過去のスコア履歴を読み込む
-    if "score_history" not in st.session_state:
-        saved_scores = localS.getItem("sokki_scores")
-        # 何も保存されていなければ空のリスト、保存されていればそのリストを使う
-        st.session_state.score_history = saved_scores if saved_scores else[]
+    if "score_history_random" not in st.session_state:
+        saved = localS.getItem("sokki_scores_random")
+        st.session_state.score_history_random = saved if saved else[]
+    if "score_history_word" not in st.session_state:
+        saved = localS.getItem("sokki_scores_word")
+        st.session_state.score_history_word = saved if saved else[]
 
 def reset_game():
     st.session_state.phase = 0
@@ -99,6 +133,11 @@ def main():
     if st.session_state.phase == 0:
         st.header("⚙️ 設定フェーズ")
         
+        st.session_state.practice_mode = st.radio(
+            "練習モードを選択してください：",["ランダム練習モード", "単語練習モード"],
+            help="ランダム：無作為な文字や反復記号の練習\n\n単語：実用的な単語の書き取り練習"
+        )
+        
         st.session_state.input_method = st.radio(
             "メモの方法を選択してください：",["紙に書く", "画面に直接手書きする（テスト機能）"]
         )
@@ -108,24 +147,35 @@ def main():
         )
         
         if st.button("この設定でスタート", type="primary"):
-            st.session_state.questions_list =[generate_question() for _ in range(st.session_state.total_questions)]
+            if st.session_state.practice_mode == "ランダム練習モード":
+                st.session_state.questions_list =[generate_random_question() for _ in range(st.session_state.total_questions)]
+            else:
+                st.session_state.questions_list =[generate_word_question() for _ in range(st.session_state.total_questions)]
+            
             st.session_state.phase = 1
             st.rerun()
             
-        # これまでのスコアをリセットする機能
-        if len(st.session_state.score_history) > 0:
-            st.markdown("---")
-            if st.button("🗑️ スコアの履歴を削除する"):
-                st.session_state.score_history = []
-                localS.setItem("sokki_scores",[])
-                st.success("スコアの履歴を削除しました。")
-                st.rerun()
+        st.markdown("---")
+        with st.expander("🗑️ スコア履歴の管理"):
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("ランダムモードの履歴を削除", use_container_width=True):
+                    st.session_state.score_history_random =[]
+                    localS.setItem("sokki_scores_random",[])
+                    st.success("ランダム履歴を削除しました。")
+                    st.rerun()
+            with col2:
+                if st.button("単語モードの履歴を削除", use_container_width=True):
+                    st.session_state.score_history_word =[]
+                    localS.setItem("sokki_scores_word",[])
+                    st.success("単語履歴を削除しました。")
+                    st.rerun()
 
     # ========================================
     # フェーズ1：連続書き取りフェーズ
     # ========================================
     elif st.session_state.phase == 1:
-        st.header("1. 連続書き取りフェーズ")
+        st.header(f"1. 連続書き取り ({st.session_state.practice_mode})")
         
         if st.session_state.q_start_time is None:
             st.session_state.q_start_time = time.time()
@@ -146,22 +196,12 @@ def main():
         
         if st.session_state.input_method == "画面に直接手書きする（テスト機能）":
             st.markdown(
-                """
-                <style>
-                canvas { width: 100% !important; touch-action: none; }
-                </style>
-                """,
+                """<style>canvas { width: 100% !important; touch-action: none; }</style>""",
                 unsafe_allow_html=True,
             )
-            
             canvas_result = st_canvas(
-                fill_color="rgba(255, 255, 255, 1)", 
-                stroke_width=4,
-                stroke_color="#000000",
-                background_color="#FFFFFF",
-                height=300, 
-                width=400,  
-                drawing_mode="freedraw",
+                fill_color="rgba(255, 255, 255, 1)", stroke_width=4, stroke_color="#000000",
+                background_color="#FFFFFF", height=300, width=400, drawing_mode="freedraw",
                 key=f"canvas_{st.session_state.current_q_index}", 
             )
             st.caption("※下のゴミ箱アイコンで全消去できます")
@@ -177,7 +217,6 @@ def main():
                 
                 st.session_state.total_time += time.time() - st.session_state.q_start_time
                 st.session_state.q_start_time = None
-                
                 st.session_state.current_q_index += 1
                 st.rerun()
         else:
@@ -228,7 +267,6 @@ def main():
                     st.rerun()
                     
         else:
-            # スコア計算と保存の処理
             if not st.session_state.judged:
                 correct_count = sum([1 for i in range(total) if st.session_state.questions_list[i] == st.session_state.user_answers.get(i, "")])
                 
@@ -237,22 +275,27 @@ def main():
                 speed_bonus = correct_count * max(0, 10 - avg_time) * 100
                 final_score = int(base_score + speed_bonus)
                 
-                # スコアをリストに追加し、ブラウザのストレージにも保存する
-                st.session_state.score_history.append(final_score)
-                localS.setItem("sokki_scores", st.session_state.score_history)
+                if st.session_state.practice_mode == "ランダム練習モード":
+                    st.session_state.score_history_random.append(final_score)
+                    localS.setItem("sokki_scores_random", st.session_state.score_history_random)
+                else:
+                    st.session_state.score_history_word.append(final_score)
+                    localS.setItem("sokki_scores_word", st.session_state.score_history_word)
                 
                 st.session_state.judged = True
 
             st.header("🏆 判定結果")
+            st.caption(f"モード：{st.session_state.practice_mode}")
             
-            st.success(f"### 🎯 今回のスコア： {st.session_state.score_history[-1]:,} 点")
+            history = st.session_state.score_history_random if st.session_state.practice_mode == "ランダム練習モード" else st.session_state.score_history_word
+            
+            st.success(f"### 🎯 今回のスコア： {history[-1]:,} 点")
             avg_time_display = st.session_state.total_time / total
             st.write(f"⏱️ 平均書き取り時間: 1問あたり **{avg_time_display:.1f} 秒**")
             
-            # グラフ表示（過去分を含めて2回以上プレイしている場合）
-            if len(st.session_state.score_history) > 1:
-                st.markdown("📈 **スコアの推移（過去からの成長記録）**")
-                st.line_chart(st.session_state.score_history)
+            if len(history) > 1:
+                st.markdown(f"📈 **スコアの推移（{st.session_state.practice_mode}）**")
+                st.line_chart(history)
             
             st.markdown("---")
             
