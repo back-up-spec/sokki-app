@@ -1,5 +1,6 @@
 import streamlit as st
 import random
+import time
 from streamlit_drawable_canvas import st_canvas
 
 # ========================================
@@ -15,7 +16,7 @@ SOKUON = ["っ"]
 HIRAGANA_LIST = SEION + DAKUON + YOUON + SOKUON
 
 def generate_question():
-    patterns = [1, 2, 3, 4, 5]
+    patterns =[1, 2, 3, 4, 5]
     weights =[60, 10, 10, 10, 10]
     pattern = random.choices(patterns, weights=weights, k=1)[0]
     
@@ -57,9 +58,16 @@ def init_state():
         st.session_state.input_method = "紙に書く"
     if "drawings" not in st.session_state:
         st.session_state.drawings = {}
-    # 👇 描画モード（ペンか消しゴムか）を管理する変数
-    if "drawing_mode" not in st.session_state:
-        st.session_state.drawing_mode = "freedraw" # freedraw=ペン, transform=消しゴムの代用(選択して消す)等の回避策
+        
+    # 👇 時間計測とスコア用の変数を追加
+    if "total_time" not in st.session_state:
+        st.session_state.total_time = 0.0
+    if "q_start_time" not in st.session_state:
+        st.session_state.q_start_time = None
+    if "score_history" not in st.session_state:
+        st.session_state.score_history =[]
+    if "judged" not in st.session_state:
+        st.session_state.judged = False
 
 def reset_game():
     st.session_state.phase = 0
@@ -68,10 +76,11 @@ def reset_game():
     st.session_state.user_answers = {}
     st.session_state.shuffled_indices =[]
     st.session_state.drawings = {}
-    st.session_state.drawing_mode = "freedraw"
+    st.session_state.total_time = 0.0
+    st.session_state.q_start_time = None
+    st.session_state.judged = False
 
 def main():
-    # スマホ対応のため、layoutを"wide"にして横幅を広げやすくする
     st.set_page_config(page_title="速記反復練習アプリ", page_icon="📝", layout="centered")
     st.title("速記反復練習アプリ 📝")
     
@@ -102,6 +111,10 @@ def main():
     elif st.session_state.phase == 1:
         st.header("1. 連続書き取りフェーズ")
         
+        # タイマーの開始（問題が表示された瞬間の時刻を記録）
+        if st.session_state.q_start_time is None:
+            st.session_state.q_start_time = time.time()
+        
         current_num = st.session_state.current_q_index + 1
         total = st.session_state.total_questions
         
@@ -117,43 +130,25 @@ def main():
         canvas_result = None
         
         if st.session_state.input_method == "画面に直接手書きする（テスト機能）":
-            # 線の色をモードによって切り替える（消しゴムの代用として白ペンを使う）
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("✏️ ペンで書く", use_container_width=True):
-                    st.session_state.drawing_mode = "ペン"
-            with col2:
-                if st.button("🧽 消しゴム (白ペン)", use_container_width=True):
-                    st.session_state.drawing_mode = "消しゴム"
-            
-            # モードに応じた設定
-            stroke_color = "#000000" if st.session_state.drawing_mode == "ペン" else "#FFFFFF"
-            stroke_width = 3 if st.session_state.drawing_mode == "ペン" else 20 # 消しゴムは太くする
-            
-            st.caption(f"現在のモード: **{st.session_state.drawing_mode}**")
-            
-            # CSSで横幅いっぱいになるように調整
             st.markdown(
                 """
                 <style>
-                canvas {
-                    width: 100% !important;
-                    touch-action: none; /* スマホのスワイプ誤爆を防ぐ */
-                }
+                canvas { width: 100% !important; touch-action: none; }
                 </style>
                 """,
                 unsafe_allow_html=True,
             )
             
+            # 消しゴムボタンを廃止し、設定をシンプルに
             canvas_result = st_canvas(
                 fill_color="rgba(255, 255, 255, 1)", 
-                stroke_width=stroke_width,
-                stroke_color=stroke_color,
+                stroke_width=4,
+                stroke_color="#000000",
                 background_color="#FFFFFF",
-                height=300, # 縦幅を広げて書きやすく
-                width=400,  # ベースサイズ（CSSで100%に引き伸ばされる）
+                height=300, 
+                width=400,  
                 drawing_mode="freedraw",
-                key=f"canvas_{st.session_state.current_q_index}_{st.session_state.drawing_mode}", 
+                key=f"canvas_{st.session_state.current_q_index}", 
             )
             st.caption("※下のゴミ箱アイコンで全消去できます")
         else:
@@ -165,13 +160,22 @@ def main():
             if st.button("書き終わったら次のお題へ", type="primary", use_container_width=True):
                 if st.session_state.input_method == "画面に直接手書きする（テスト機能）" and canvas_result is not None:
                     st.session_state.drawings[st.session_state.current_q_index] = canvas_result.image_data
+                
+                # かかった時間を加算し、タイマーをリセット
+                st.session_state.total_time += time.time() - st.session_state.q_start_time
+                st.session_state.q_start_time = None
+                
                 st.session_state.current_q_index += 1
-                st.session_state.drawing_mode = "ペン" # 次の問題に行ったらペンに戻す
                 st.rerun()
         else:
             if st.button("すべて書き終わった！反訳テストへ", type="primary", use_container_width=True):
                 if st.session_state.input_method == "画面に直接手書きする（テスト機能）" and canvas_result is not None:
                     st.session_state.drawings[st.session_state.current_q_index] = canvas_result.image_data
+                
+                # 最後のかかった時間を加算
+                st.session_state.total_time += time.time() - st.session_state.q_start_time
+                st.session_state.q_start_time = None
+                
                 indices = list(range(st.session_state.total_questions))
                 random.shuffle(indices)
                 st.session_state.shuffled_indices = indices
@@ -212,7 +216,33 @@ def main():
                     st.rerun()
                     
         else:
+            # 👇 スコア計算処理（1回だけ実行されるように制御）
+            if not st.session_state.judged:
+                correct_count = sum([1 for i in range(total) if st.session_state.questions_list[i] == st.session_state.user_answers.get(i, "")])
+                
+                avg_time = st.session_state.total_time / total
+                base_score = correct_count * 1000
+                speed_bonus = correct_count * max(0, 10 - avg_time) * 100
+                final_score = int(base_score + speed_bonus)
+                
+                st.session_state.score_history.append(final_score)
+                st.session_state.judged = True
+
             st.header("🏆 判定結果")
+            
+            # スコアの発表
+            st.success(f"### 🎯 総合スコア： {st.session_state.score_history[-1]:,} 点")
+            avg_time_display = st.session_state.total_time / total
+            st.write(f"⏱️ 平均書き取り時間: 1問あたり **{avg_time_display:.1f} 秒**")
+            
+            # グラフ表示（2回以上プレイした場合）
+            if len(st.session_state.score_history) > 1:
+                st.markdown("📈 **スコアの推移（あなたの成長記録）**")
+                st.line_chart(st.session_state.score_history)
+            
+            st.markdown("---")
+            
+            # 答え合わせ表示
             correct_count = 0
             for i in range(total):
                 st.markdown(f"**第 {i+1} 問**")
@@ -224,12 +254,10 @@ def main():
                 else:
                     st.error(f"❌ 不正解... (入力: {user_ans} / 正解: {correct_ans})")
             
-            st.markdown("---")
-            st.markdown(f"### あなたの正答率： **{correct_count} / {total}**")
+            st.markdown(f"**正答率： {correct_count} / {total}**")
             
             if correct_count == total:
                 st.balloons()
-                st.success("🎉 全問正解です！素晴らしい！")
             
             st.markdown("<br>", unsafe_allow_html=True)
             if st.button("もう一度最初から練習する", type="primary", use_container_width=True):
