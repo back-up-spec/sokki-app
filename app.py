@@ -40,7 +40,7 @@ def generate_question():
 def init_state():
     """セッションステートの初期化"""
     if "phase" not in st.session_state:
-        st.session_state.phase = 0  # 0: 設定フェーズ
+        st.session_state.phase = 0
     if "total_questions" not in st.session_state:
         st.session_state.total_questions = 3
     if "questions_list" not in st.session_state:
@@ -48,14 +48,18 @@ def init_state():
     if "current_q_index" not in st.session_state:
         st.session_state.current_q_index = 0
     if "user_answers" not in st.session_state:
-        st.session_state.user_answers =[]
+        # ランダム順で答えてもらうため、リストではなく辞書型(何問目の答えか)で保持する
+        st.session_state.user_answers = {}
+    if "shuffled_indices" not in st.session_state:
+        st.session_state.shuffled_indices =[]
 
 def reset_game():
     """ゲームのリセット（最初から）"""
     st.session_state.phase = 0
     st.session_state.questions_list =[]
     st.session_state.current_q_index = 0
-    st.session_state.user_answers =[]
+    st.session_state.user_answers = {}
+    st.session_state.shuffled_indices =[]
 
 def main():
     st.set_page_config(page_title="速記反復練習アプリ", page_icon="📝")
@@ -103,14 +107,18 @@ def main():
                 st.session_state.current_q_index += 1
                 st.rerun()
         else:
-            # 撮影フェーズを飛ばして、そのまま反訳フェーズへ
             if st.button("すべて書き終わった！反訳テストへ", type="primary"):
+                # 反訳フェーズ用に「出題順（インデックス）」をシャッフルして用意する
+                indices = list(range(st.session_state.total_questions))
+                random.shuffle(indices)
+                st.session_state.shuffled_indices = indices
+                
                 st.session_state.current_q_index = 0
                 st.session_state.phase = 2 
                 st.rerun()
 
     # ========================================
-    # フェーズ2：連続反訳フェーズ ＆ 結果発表
+    # フェーズ2：ランダム連続反訳フェーズ ＆ 結果発表
     # ========================================
     elif st.session_state.phase == 2:
         st.header("2. 連続反訳フェーズ")
@@ -119,28 +127,37 @@ def main():
         
         # まだ全問解答していない場合
         if st.session_state.current_q_index < total:
-            current_num = st.session_state.current_q_index + 1
-            st.subheader(f"解答入力：第 {current_num} 問 / 全 {total} 問")
-            st.info("👀 手元のメモを直接見ながら、読み取った文字を入力してください。")
+            # 今回聞く問題のインデックス番号を取り出し、表示用の問題番号(1始まり)にする
+            target_idx = st.session_state.shuffled_indices[st.session_state.current_q_index]
+            display_num = target_idx + 1
+            progress_num = st.session_state.current_q_index + 1
             
-            with st.form(key=f"answer_form_{current_num}"):
-                user_input = st.text_input("読み取った文字を入力:", key=f"input_{current_num}")
+            st.subheader(f"解答入力 ({progress_num}/{total})")
+            # どこを読むべきかを強調表示
+            st.warning(f"👀 メモから **「第 {display_num} 問」** に書いた内容を探して、入力してください。")
+            
+            with st.form(key=f"answer_form_{st.session_state.current_q_index}"):
+                user_input = st.text_input("読み取った文字を入力:", key=f"input_{st.session_state.current_q_index}")
                 submit = st.form_submit_button("次の解答へ")
                 
                 if submit:
-                    st.session_state.user_answers.append(user_input)
+                    # 元の問題番号（target_idx）をキーにして、解答を保存する
+                    st.session_state.user_answers[target_idx] = user_input
                     st.session_state.current_q_index += 1
                     st.rerun()
                     
         # 全問解答が終わった場合（結果発表）
         else:
             st.header("🏆 判定結果")
+            st.write("※第1問から順番に結果を表示しています。")
             
             correct_count = 0
+            # 結果はランダム順ではなく、1問目から順番に表示する
             for i in range(total):
                 st.markdown(f"**第 {i+1} 問**")
                 correct_ans = st.session_state.questions_list[i]
-                user_ans = st.session_state.user_answers[i]
+                # 辞書から該当する問題の解答を取り出す
+                user_ans = st.session_state.user_answers.get(i, "")
                 
                 if correct_ans == user_ans:
                     st.success(f"⭕ 正解！ (入力: {user_ans})")
