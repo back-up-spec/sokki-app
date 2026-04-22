@@ -15,7 +15,16 @@ HIRAGANA_LIST = SEION + DAKUON + YOUON + SOKUON
 
 def generate_question():
     """速記の反復記号練習用に、様々なパターンの問題をランダム生成する"""
-    pattern = random.choice([1, 2, 3, 4, 5])
+    
+    # パターンのリスト（1:通常, 2:1音反復, 3:2音反復, 4:3音反復, 5:4音反復）
+    patterns = [1, 2, 3, 4, 5]
+    # 各パターンが出現する「重み（確率）」を設定
+    # 現在の設定: 通常=60%, その他=各10%
+    weights =[60, 10, 10, 10, 10]
+    
+    # 確率に基づいてパターンを1つ選ぶ（random.choicesはリストを返すので[0]で中身を取り出す）
+    pattern = random.choices(patterns, weights=weights, k=1)[0]
+    
     if pattern == 1:
         return "".join(random.sample(HIRAGANA_LIST, 5))
     elif pattern == 2:
@@ -27,7 +36,7 @@ def generate_question():
     elif pattern == 3:
         chars = random.sample(HIRAGANA_LIST, 3)
         repeat_part =[chars[0], chars[1], chars[0], chars[1]]
-        others = [chars[2]]
+        others =[chars[2]]
         pos = random.randint(0, len(others))
         return "".join(others[:pos] + repeat_part + others[pos:])
     elif pattern == 4:
@@ -48,7 +57,6 @@ def init_state():
     if "current_q_index" not in st.session_state:
         st.session_state.current_q_index = 0
     if "user_answers" not in st.session_state:
-        # ランダム順で答えてもらうため、リストではなく辞書型(何問目の答えか)で保持する
         st.session_state.user_answers = {}
     if "shuffled_indices" not in st.session_state:
         st.session_state.shuffled_indices =[]
@@ -108,7 +116,6 @@ def main():
                 st.rerun()
         else:
             if st.button("すべて書き終わった！反訳テストへ", type="primary"):
-                # 反訳フェーズ用に「出題順（インデックス）」をシャッフルして用意する
                 indices = list(range(st.session_state.total_questions))
                 random.shuffle(indices)
                 st.session_state.shuffled_indices = indices
@@ -125,15 +132,12 @@ def main():
         
         total = st.session_state.total_questions
         
-        # まだ全問解答していない場合
         if st.session_state.current_q_index < total:
-            # 今回聞く問題のインデックス番号を取り出し、表示用の問題番号(1始まり)にする
             target_idx = st.session_state.shuffled_indices[st.session_state.current_q_index]
             display_num = target_idx + 1
             progress_num = st.session_state.current_q_index + 1
             
             st.subheader(f"解答入力 ({progress_num}/{total})")
-            # どこを読むべきかを強調表示
             st.warning(f"👀 メモから **「第 {display_num} 問」** に書いた内容を探して、入力してください。")
             
             with st.form(key=f"answer_form_{st.session_state.current_q_index}"):
@@ -141,22 +145,18 @@ def main():
                 submit = st.form_submit_button("次の解答へ")
                 
                 if submit:
-                    # 元の問題番号（target_idx）をキーにして、解答を保存する
                     st.session_state.user_answers[target_idx] = user_input
                     st.session_state.current_q_index += 1
                     st.rerun()
                     
-        # 全問解答が終わった場合（結果発表）
         else:
             st.header("🏆 判定結果")
             st.write("※第1問から順番に結果を表示しています。")
             
             correct_count = 0
-            # 結果はランダム順ではなく、1問目から順番に表示する
             for i in range(total):
                 st.markdown(f"**第 {i+1} 問**")
                 correct_ans = st.session_state.questions_list[i]
-                # 辞書から該当する問題の解答を取り出す
                 user_ans = st.session_state.user_answers.get(i, "")
                 
                 if correct_ans == user_ans:
