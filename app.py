@@ -1,5 +1,7 @@
 import streamlit as st
 import random
+# 👇 画面にお絵かきするための拡張機能を読み込む
+from streamlit_drawable_canvas import st_canvas
 
 # ========================================
 # ひらがなリストの設定
@@ -15,14 +17,8 @@ HIRAGANA_LIST = SEION + DAKUON + YOUON + SOKUON
 
 def generate_question():
     """速記の反復記号練習用に、様々なパターンの問題をランダム生成する"""
-    
-    # パターンのリスト（1:通常, 2:1音反復, 3:2音反復, 4:3音反復, 5:4音反復）
     patterns = [1, 2, 3, 4, 5]
-    # 各パターンが出現する「重み（確率）」を設定
-    # 現在の設定: 通常=60%, その他=各10%
     weights =[60, 10, 10, 10, 10]
-    
-    # 確率に基づいてパターンを1つ選ぶ（random.choicesはリストを返すので[0]で中身を取り出す）
     pattern = random.choices(patterns, weights=weights, k=1)[0]
     
     if pattern == 1:
@@ -60,6 +56,11 @@ def init_state():
         st.session_state.user_answers = {}
     if "shuffled_indices" not in st.session_state:
         st.session_state.shuffled_indices =[]
+    # 👇 メモの方法と、デジタルメモの画像データを保存する変数を追加
+    if "input_method" not in st.session_state:
+        st.session_state.input_method = "紙に書く"
+    if "drawings" not in st.session_state:
+        st.session_state.drawings = {}
 
 def reset_game():
     """ゲームのリセット（最初から）"""
@@ -68,6 +69,7 @@ def reset_game():
     st.session_state.current_q_index = 0
     st.session_state.user_answers = {}
     st.session_state.shuffled_indices =[]
+    st.session_state.drawings = {} # デジタルメモもリセット
 
 def main():
     st.set_page_config(page_title="速記反復練習アプリ", page_icon="📝")
@@ -80,13 +82,17 @@ def main():
     # ========================================
     if st.session_state.phase == 0:
         st.header("⚙️ 設定フェーズ")
-        st.write("今回練習する問題数（回数）を決めてください。")
         
+        st.session_state.input_method = st.radio(
+            "メモの方法を選択してください：",["紙に書く", "画面に直接手書きする（テスト機能）"]
+        )
+        
+        st.write("今回練習する問題数（回数）を決めてください。")
         st.session_state.total_questions = st.number_input(
             "練習回数", min_value=1, max_value=50, value=5, step=1
         )
         
-        if st.button("この回数でスタート", type="primary"):
+        if st.button("この設定でスタート", type="primary"):
             st.session_state.questions_list =[generate_question() for _ in range(st.session_state.total_questions)]
             st.session_state.phase = 1
             st.rerun()
@@ -101,7 +107,6 @@ def main():
         total = st.session_state.total_questions
         
         st.subheader(f"第 {current_num} 問 / 全 {total} 問")
-        st.write("手元の紙に速記してください。")
         
         current_target = st.session_state.questions_list[st.session_state.current_q_index]
         st.markdown(
@@ -110,12 +115,39 @@ def main():
             unsafe_allow_html=True
         )
         
+        canvas_result = None
+        
+        # デジタルメモを選択した場合のみ、キャンバスを表示する
+        if st.session_state.input_method == "画面に直接手書きする（テスト機能）":
+            st.write("▼ 下の白い枠内に指で速記を書いてください")
+            canvas_result = st_canvas(
+                fill_color="rgba(0, 0, 0, 0)",  # 塗りつぶしなし
+                stroke_width=4,                 # ペンの太さ
+                stroke_color="#000000",         # ペンの色（黒）
+                background_color="#FFFFFF",     # 背景色（白）
+                height=250,                     # キャンバスの高さ
+                width=350,                      # スマホでもはみ出ない幅
+                drawing_mode="freedraw",
+                key=f"canvas_{st.session_state.current_q_index}", # 問題ごとにキャンバスを切り替える
+            )
+        else:
+            st.write("手元の紙に速記してください。")
+            
+        st.markdown("<br>", unsafe_allow_html=True)
+
         if current_num < total:
             if st.button("書き終わったら次のお題へ", type="primary"):
+                # デジタルメモの場合、書いた画像を保存してから次へ
+                if st.session_state.input_method == "画面に直接手書きする（テスト機能）" and canvas_result is not None:
+                    st.session_state.drawings[st.session_state.current_q_index] = canvas_result.image_data
+                    
                 st.session_state.current_q_index += 1
                 st.rerun()
         else:
             if st.button("すべて書き終わった！反訳テストへ", type="primary"):
+                if st.session_state.input_method == "画面に直接手書きする（テスト機能）" and canvas_result is not None:
+                    st.session_state.drawings[st.session_state.current_q_index] = canvas_result.image_data
+                    
                 indices = list(range(st.session_state.total_questions))
                 random.shuffle(indices)
                 st.session_state.shuffled_indices = indices
@@ -131,6 +163,16 @@ def main():
         st.header("2. 連続反訳フェーズ")
         
         total = st.session_state.total_questions
+        
+        # デジタルメモの場合は、これまでに書いたメモをスクロールできる箱の中にまとめて表示する
+        if st.session_state.input_method == "画面に直接手書きする（テスト機能）":
+            with st.container(height=300):
+                st.markdown("📝 **【あなたのデジタルメモ】**")
+                for i in range(total):
+                    if i in st.session_state.drawings and st.session_state.drawings[i] is not None:
+                        st.caption(f"第 {i+1} 問")
+                        st.image(st.session_state.drawings[i])
+            st.markdown("---")
         
         if st.session_state.current_q_index < total:
             target_idx = st.session_state.shuffled_indices[st.session_state.current_q_index]
