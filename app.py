@@ -1,6 +1,5 @@
 import streamlit as st
 import random
-# 👇 画面にお絵かきするための拡張機能を読み込む
 from streamlit_drawable_canvas import st_canvas
 
 # ========================================
@@ -16,7 +15,6 @@ SOKUON = ["っ"]
 HIRAGANA_LIST = SEION + DAKUON + YOUON + SOKUON
 
 def generate_question():
-    """速記の反復記号練習用に、様々なパターンの問題をランダム生成する"""
     patterns = [1, 2, 3, 4, 5]
     weights =[60, 10, 10, 10, 10]
     pattern = random.choices(patterns, weights=weights, k=1)[0]
@@ -43,7 +41,6 @@ def generate_question():
         return "".join(chars + chars)
 
 def init_state():
-    """セッションステートの初期化"""
     if "phase" not in st.session_state:
         st.session_state.phase = 0
     if "total_questions" not in st.session_state:
@@ -56,23 +53,26 @@ def init_state():
         st.session_state.user_answers = {}
     if "shuffled_indices" not in st.session_state:
         st.session_state.shuffled_indices =[]
-    # 👇 メモの方法と、デジタルメモの画像データを保存する変数を追加
     if "input_method" not in st.session_state:
         st.session_state.input_method = "紙に書く"
     if "drawings" not in st.session_state:
         st.session_state.drawings = {}
+    # 👇 描画モード（ペンか消しゴムか）を管理する変数
+    if "drawing_mode" not in st.session_state:
+        st.session_state.drawing_mode = "freedraw" # freedraw=ペン, transform=消しゴムの代用(選択して消す)等の回避策
 
 def reset_game():
-    """ゲームのリセット（最初から）"""
     st.session_state.phase = 0
     st.session_state.questions_list =[]
     st.session_state.current_q_index = 0
     st.session_state.user_answers = {}
     st.session_state.shuffled_indices =[]
-    st.session_state.drawings = {} # デジタルメモもリセット
+    st.session_state.drawings = {}
+    st.session_state.drawing_mode = "freedraw"
 
 def main():
-    st.set_page_config(page_title="速記反復練習アプリ", page_icon="📝")
+    # スマホ対応のため、layoutを"wide"にして横幅を広げやすくする
+    st.set_page_config(page_title="速記反復練習アプリ", page_icon="📝", layout="centered")
     st.title("速記反復練習アプリ 📝")
     
     init_state()
@@ -87,7 +87,6 @@ def main():
             "メモの方法を選択してください：",["紙に書く", "画面に直接手書きする（テスト機能）"]
         )
         
-        st.write("今回練習する問題数（回数）を決めてください。")
         st.session_state.total_questions = st.number_input(
             "練習回数", min_value=1, max_value=50, value=5, step=1
         )
@@ -117,41 +116,65 @@ def main():
         
         canvas_result = None
         
-        # デジタルメモを選択した場合のみ、キャンバスを表示する
         if st.session_state.input_method == "画面に直接手書きする（テスト機能）":
-            st.write("▼ 下の白い枠内に指で速記を書いてください")
-            canvas_result = st_canvas(
-                fill_color="rgba(0, 0, 0, 0)",  # 塗りつぶしなし
-                stroke_width=4,                 # ペンの太さ
-                stroke_color="#000000",         # ペンの色（黒）
-                background_color="#FFFFFF",     # 背景色（白）
-                height=250,                     # キャンバスの高さ
-                width=350,                      # スマホでもはみ出ない幅
-                drawing_mode="freedraw",
-                key=f"canvas_{st.session_state.current_q_index}", # 問題ごとにキャンバスを切り替える
+            # 線の色をモードによって切り替える（消しゴムの代用として白ペンを使う）
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("✏️ ペンで書く", use_container_width=True):
+                    st.session_state.drawing_mode = "ペン"
+            with col2:
+                if st.button("🧽 消しゴム (白ペン)", use_container_width=True):
+                    st.session_state.drawing_mode = "消しゴム"
+            
+            # モードに応じた設定
+            stroke_color = "#000000" if st.session_state.drawing_mode == "ペン" else "#FFFFFF"
+            stroke_width = 3 if st.session_state.drawing_mode == "ペン" else 20 # 消しゴムは太くする
+            
+            st.caption(f"現在のモード: **{st.session_state.drawing_mode}**")
+            
+            # CSSで横幅いっぱいになるように調整
+            st.markdown(
+                """
+                <style>
+                canvas {
+                    width: 100% !important;
+                    touch-action: none; /* スマホのスワイプ誤爆を防ぐ */
+                }
+                </style>
+                """,
+                unsafe_allow_html=True,
             )
+            
+            canvas_result = st_canvas(
+                fill_color="rgba(255, 255, 255, 1)", 
+                stroke_width=stroke_width,
+                stroke_color=stroke_color,
+                background_color="#FFFFFF",
+                height=300, # 縦幅を広げて書きやすく
+                width=400,  # ベースサイズ（CSSで100%に引き伸ばされる）
+                drawing_mode="freedraw",
+                key=f"canvas_{st.session_state.current_q_index}_{st.session_state.drawing_mode}", 
+            )
+            st.caption("※下のゴミ箱アイコンで全消去できます")
         else:
             st.write("手元の紙に速記してください。")
             
         st.markdown("<br>", unsafe_allow_html=True)
 
         if current_num < total:
-            if st.button("書き終わったら次のお題へ", type="primary"):
-                # デジタルメモの場合、書いた画像を保存してから次へ
+            if st.button("書き終わったら次のお題へ", type="primary", use_container_width=True):
                 if st.session_state.input_method == "画面に直接手書きする（テスト機能）" and canvas_result is not None:
                     st.session_state.drawings[st.session_state.current_q_index] = canvas_result.image_data
-                    
                 st.session_state.current_q_index += 1
+                st.session_state.drawing_mode = "ペン" # 次の問題に行ったらペンに戻す
                 st.rerun()
         else:
-            if st.button("すべて書き終わった！反訳テストへ", type="primary"):
+            if st.button("すべて書き終わった！反訳テストへ", type="primary", use_container_width=True):
                 if st.session_state.input_method == "画面に直接手書きする（テスト機能）" and canvas_result is not None:
                     st.session_state.drawings[st.session_state.current_q_index] = canvas_result.image_data
-                    
                 indices = list(range(st.session_state.total_questions))
                 random.shuffle(indices)
                 st.session_state.shuffled_indices = indices
-                
                 st.session_state.current_q_index = 0
                 st.session_state.phase = 2 
                 st.rerun()
@@ -161,17 +184,15 @@ def main():
     # ========================================
     elif st.session_state.phase == 2:
         st.header("2. 連続反訳フェーズ")
-        
         total = st.session_state.total_questions
         
-        # デジタルメモの場合は、これまでに書いたメモをスクロールできる箱の中にまとめて表示する
         if st.session_state.input_method == "画面に直接手書きする（テスト機能）":
-            with st.container(height=300):
+            with st.container(height=350):
                 st.markdown("📝 **【あなたのデジタルメモ】**")
                 for i in range(total):
                     if i in st.session_state.drawings and st.session_state.drawings[i] is not None:
                         st.caption(f"第 {i+1} 問")
-                        st.image(st.session_state.drawings[i])
+                        st.image(st.session_state.drawings[i], use_container_width=True)
             st.markdown("---")
         
         if st.session_state.current_q_index < total:
@@ -180,12 +201,11 @@ def main():
             progress_num = st.session_state.current_q_index + 1
             
             st.subheader(f"解答入力 ({progress_num}/{total})")
-            st.warning(f"👀 メモから **「第 {display_num} 問」** に書いた内容を探して、入力してください。")
+            st.warning(f"👀 メモから **「第 {display_num} 問」** を探して入力してください。")
             
             with st.form(key=f"answer_form_{st.session_state.current_q_index}"):
                 user_input = st.text_input("読み取った文字を入力:", key=f"input_{st.session_state.current_q_index}")
-                submit = st.form_submit_button("次の解答へ")
-                
+                submit = st.form_submit_button("次の解答へ", use_container_width=True)
                 if submit:
                     st.session_state.user_answers[target_idx] = user_input
                     st.session_state.current_q_index += 1
@@ -193,14 +213,11 @@ def main():
                     
         else:
             st.header("🏆 判定結果")
-            st.write("※第1問から順番に結果を表示しています。")
-            
             correct_count = 0
             for i in range(total):
                 st.markdown(f"**第 {i+1} 問**")
                 correct_ans = st.session_state.questions_list[i]
                 user_ans = st.session_state.user_answers.get(i, "")
-                
                 if correct_ans == user_ans:
                     st.success(f"⭕ 正解！ (入力: {user_ans})")
                     correct_count += 1
@@ -215,7 +232,7 @@ def main():
                 st.success("🎉 全問正解です！素晴らしい！")
             
             st.markdown("<br>", unsafe_allow_html=True)
-            if st.button("もう一度最初から練習する", type="primary"):
+            if st.button("もう一度最初から練習する", type="primary", use_container_width=True):
                 reset_game()
                 st.rerun()
 
